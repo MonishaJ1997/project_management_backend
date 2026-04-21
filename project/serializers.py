@@ -1,9 +1,8 @@
-
 from rest_framework import serializers
 from django.contrib.auth.models import User
 
-from .models import Project, Task, ActivityLog, Notification, Sprint
-
+from .models import Project, Task,  Sprint
+from .models import Project, Task, Sprint, Member
 
 # =========================================
 # 🔐 REGISTER SERIALIZER
@@ -21,14 +20,20 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         name = validated_data.pop('name')
 
-        # ✅ CREATE USER
         user = User.objects.create_user(**validated_data)
-
-        # ✅ SAVE NAME AS first_name
         user.first_name = name
         user.save()
 
         return user
+
+
+# =========================================
+# 👤 USER SERIALIZER (FOR DROPDOWN)
+# =========================================
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username", "email"]
 
 
 # =========================================
@@ -39,29 +44,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = '__all__'
-
-
-# =========================================
-# ✅ TASK SERIALIZER
-# =========================================
-class TaskSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Task
-        fields = [
-            "id",
-            "title",
-            "description",
-            "status",
-            "priority",
-            "project",
-            "assigned_to",
-            "created_at"
-        ]
-
-        # 🔥 IMPORTANT: USER AUTO ASSIGNED
-        read_only_fields = ["assigned_to"]
+        fields = "__all__"
 
 
 # =========================================
@@ -69,31 +52,42 @@ class TaskSerializer(serializers.ModelSerializer):
 # =========================================
 class SprintSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(
-        source='project.name',
+        source="project.name",
         read_only=True
     )
 
     class Meta:
         model = Sprint
-        fields = '__all__'
+        fields = "__all__"
 
 
 # =========================================
-# 📜 ACTIVITY LOG SERIALIZER
+# ✅ TASK SERIALIZER (FULLY FIXED 🔥)
 # =========================================
-class ActivityLogSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField()
+
+from rest_framework import serializers
+from .models import Task, Member
+
+class TaskSerializer(serializers.ModelSerializer):
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=Member.objects.all(),
+        allow_null=True,
+        required=False
+    )
+
+    assigned_to_name = serializers.SerializerMethodField()
 
     class Meta:
-        model = ActivityLog
-        fields = '__all__'
+        model = Task
+        fields = "__all__"
+
+    def get_assigned_to_name(self, obj):
+        return obj.assigned_to.name if obj.assigned_to else None
 
 
-# =========================================
-# 🔔 NOTIFICATION SERIALIZER
-# =========================================
-class NotificationSerializer(serializers.ModelSerializer):
+from .models import Member
 
+class MemberSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Notification
-        fields = '__all__'
+        model = Member
+        fields = "__all__"

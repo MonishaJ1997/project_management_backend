@@ -1,43 +1,62 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView
-
+from . import views
 from .views import (
     register,
+    login,              # ✅ use your custom login
+    me,
     dashboard,
     projects,
+    delete_project,
     tasks,
-    update_task,
+    task_detail,
     sprints,
-    activity_logs,
-    notifications
+    delete_sprint,
+    
+    users              # ✅ for dropdown
 )
 
-from django.urls import path
-from .views import me
-
 urlpatterns = [
-    path('me/', me),   # ✅ THIS IS IMPORTANT
 
+    # =========================================
     # 🔐 AUTH
+    # =========================================
     path('register/', register),
-    path('login/', TokenObtainPairView.as_view()),  # JWT login
+    path('login/', login),   # ✅ FIXED (use your login)
+    path('me/', me),
 
+    # =========================================
+    # 👥 USERS
+    # =========================================
+    path('users/', users),   # 🔥 for assign dropdown
+
+    # =========================================
     # 📊 DASHBOARD
+    # =========================================
     path('dashboard/', dashboard),
 
+    # =========================================
     # 📁 PROJECT
+    # =========================================
     path('projects/', projects),
+    path('projects/<int:pk>/', delete_project),  # ✅ DELETE
 
+    # =========================================
     # ✅ TASK
+    # =========================================
     path('tasks/', tasks),
-    path('tasks/<int:pk>/', update_task),
+    path("tasks/<int:pk>/", task_detail),
 
+    # =========================================
     # 🔄 SPRINT
+    # =========================================
     path('sprints/', sprints),
+    path('sprints/<int:pk>/', delete_sprint),  # ✅ DELETE
 
+    # =========================================
     # 📜 ACTIVITY
-    path('activity/', activity_logs),
+    # =========================================
 
-    # 🔔 NOTIFICATIONS
-    path('notifications/', notifications),
+
+     path('members/', views.members),            # GET, POST
+    path('members/<int:pk>/', views.member_detail), # DELEte
 ]

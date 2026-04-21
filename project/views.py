@@ -1,31 +1,28 @@
-
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Project, Task, Sprint, ActivityLog, Notification
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import json
+
+from .models import Project, Task, Sprint, Member
 from .serializers import (
     RegisterSerializer,
     ProjectSerializer,
     TaskSerializer,
     SprintSerializer,
-    ActivityLogSerializer,
-    NotificationSerializer
 )
 
 # =========================================
-# 🔐 LOGIN
+# 🔐 LOGIN (EMAIL BASED)
 # =========================================
 @api_view(['POST'])
 def login(request):
-    email = request.data.get("username")  # frontend sends email
+    email = request.data.get("username")
     password = request.data.get("password")
 
     try:
@@ -67,11 +64,21 @@ def register(request):
 @permission_classes([IsAuthenticated])
 def me(request):
     user = request.user
-
     return Response({
+        "id": user.id,
         "username": user.username,
         "name": user.first_name
     })
+
+
+# =========================================
+# 👥 USERS
+# =========================================
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def users(request):
+    data = User.objects.all().values("id", "username", "email")
+    return Response(data)
 
 
 # =========================================
@@ -80,34 +87,28 @@ def me(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard(request):
-    user = request.user
+    tasks = Task.objects.all()
+    projects = Project.objects.all()
 
-    tasks = Task.objects.filter(assigned_to=user)
-    projects = Project.objects.filter(created_by=user)
-
-    data = {
-        "username": user.username,
+    return Response({
         "total_tasks": tasks.count(),
         "todo": tasks.filter(status="todo").count(),
         "in_progress": tasks.filter(status="in_progress").count(),
         "done": tasks.filter(status="done").count(),
         "total_projects": projects.count(),
-    }
-
-    return Response(data)
+    })
 
 
 # =========================================
-# 📁 PROJECT APIs
+# 📁 PROJECTS
 # =========================================
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def projects(request):
 
     if request.method == 'GET':
-        projects = Project.objects.all()
-        serializer = ProjectSerializer(projects, many=True)
-        return Response(serializer.data)
+        data = Project.objects.all()
+        return Response(ProjectSerializer(data, many=True).data)
 
     if request.method == 'POST':
         serializer = ProjectSerializer(data=request.data)
@@ -120,67 +121,59 @@ def projects(request):
 
 
 # =========================================
-# ✅ TASK APIs
+# 📌 TASKS (LIST + CREATE)
 # =========================================
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def tasks(request):
 
     if request.method == 'GET':
-        tasks = Task.objects.filter(assigned_to=request.user)
-        serializer = TaskSerializer(tasks, many=True)
-        return Response(serializer.data)
+        data = Task.objects.all()
+        return Response(TaskSerializer(data, many=True).data)
 
     if request.method == 'POST':
         serializer = TaskSerializer(data=request.data)
 
         if serializer.is_valid():
-            serializer.save(assigned_to=request.user)
+            serializer.save()
             return Response(serializer.data, status=201)
 
         return Response(serializer.errors, status=400)
 
 
 # =========================================
-# ✏️ UPDATE / DELETE TASK
+# ✏️ TASK DETAIL (UPDATE + DELETE)
 # =========================================
-@api_view(['PUT', 'DELETE'])
+@api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def update_task(request, pk):
 
+def task_detail(request, pk):
     try:
-        task = Task.objects.get(id=pk, assigned_to=request.user)
+        task = Task.objects.get(id=pk)
     except Task.DoesNotExist:
         return Response({"error": "Task not found"}, status=404)
 
-    if request.method == 'PUT':
-        serializer = TaskSerializer(task, data=request.data, partial=True)
+    if request.method == 'PATCH':
+      data = request.data.copy()
 
-        if serializer.is_valid():
-            updated_task = serializer.save()
+    # 🔥 force integer conversion
+    if 'assigned_to' in data and data['assigned_to'] not in [None, ""]:
+        try:
+            data['assigned_to'] = int(data['assigned_to'])
+        except:
+            data['assigned_to'] = None
 
-            ActivityLog.objects.create(
-                user=request.user,
-                action=f"Updated task '{updated_task.title}'",
-                task=updated_task
-            )
+    serializer = TaskSerializer(task, data=data, partial=True)
 
-            return Response(serializer.data)
+    if serializer.is_valid():
+        print("VALID:", serializer.validated_data)  # DEBUG
+        serializer.save()
+        return Response(serializer.data)
 
-    if request.method == 'DELETE':
-        task_title = task.title
-        task.delete()
-
-        ActivityLog.objects.create(
-            user=request.user,
-            action=f"Deleted task '{task_title}'"
-        )
-
-        return Response({"message": "Task deleted"})
-
-
+    print("ERROR:", serializer.errors)
+    return Response(serializer.errors, status=400)
 # =========================================
-# 🔄 SPRINTS
+# 📅 SPRINTS
 # =========================================
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -188,36 +181,89 @@ def sprints(request):
 
     if request.method == 'GET':
         data = Sprint.objects.all()
-        serializer = SprintSerializer(data, many=True)
-        return Response(serializer.data)
+        return Response(SprintSerializer(data, many=True).data)
 
     if request.method == 'POST':
         serializer = SprintSerializer(data=request.data)
 
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            return Response(serializer.data, status=201)
 
-        return Response(serializer.errors)
+        return Response(serializer.errors, status=400)
 
 
 # =========================================
-# 📜 ACTIVITY LOGS
+# 🗑 DELETE SPRINT
 # =========================================
-@api_view(['GET'])
+@api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-def activity_logs(request):
-    logs = ActivityLog.objects.all().order_by('-timestamp')
-    serializer = ActivityLogSerializer(logs, many=True)
-    return Response(serializer.data)
+def delete_sprint(request, pk):
+
+    try:
+        sprint = Sprint.objects.get(id=pk)
+    except Sprint.DoesNotExist:
+        return Response({"error": "Sprint not found"}, status=404)
+
+    sprint.delete()
+    return Response({"message": "Sprint deleted"})
 
 
 # =========================================
-# 🔔 NOTIFICATIONS
+# 👥 MEMBERS (NO CSRF)
 # =========================================
-@api_view(['GET'])
+@csrf_exempt
+def members(request):
+
+    if request.method == "GET":
+        return JsonResponse(list(Member.objects.values()), safe=False)
+
+    if request.method == "POST":
+        body = json.loads(request.body)
+
+        member = Member.objects.create(
+            name=body.get("name"),
+            role=body.get("role")
+        )
+
+        return JsonResponse({
+            "id": member.id,
+            "name": member.name,
+            "role": member.role
+        })
+
+
+# =========================================
+# 🗑 MEMBER DELETE
+# =========================================
+@csrf_exempt
+def member_detail(request, pk):
+
+    try:
+        member = Member.objects.get(id=pk)
+    except Member.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    if request.method == "DELETE":
+        member.delete()
+        return JsonResponse({"message": "Deleted"})
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+
+@api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-def notifications(request):
-    data = Notification.objects.filter(user=request.user)
-    serializer = NotificationSerializer(data, many=True)
-    return Response(serializer.data)
+def delete_project(request, pk):
+    try:
+        project = Project.objects.get(id=pk, created_by=request.user)
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+
+    project.delete()
+    return Response({"message": "Project deleted"})
+
+
+
+
+

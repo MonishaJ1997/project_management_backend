@@ -1,13 +1,12 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-
 # ===============================
-# 🔹 PROJECT MODEL
+# 🔹 PROJECT
 # ===============================
 class Project(models.Model):
     name = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(blank=True)
 
     created_by = models.ForeignKey(
         User,
@@ -22,7 +21,38 @@ class Project(models.Model):
 
 
 # ===============================
-# 🔹 TASK MODEL
+# 🔹 SPRINT
+# ===============================
+class Sprint(models.Model):
+    STATUS_CHOICES = [
+        ("PLANNED", "Planned"),
+        ("ACTIVE", "Active"),
+        ("COMPLETED", "Completed"),
+    ]
+
+    name = models.CharField(max_length=200)
+
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="sprints"
+    )
+
+    start_date = models.DateField()
+    end_date = models.DateField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="PLANNED"
+    )
+
+    def __str__(self):
+        return self.name
+
+
+# ===============================
+# 🔹 TASK
 # ===============================
 class Task(models.Model):
 
@@ -39,7 +69,7 @@ class Task(models.Model):
     ]
 
     title = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -59,66 +89,36 @@ class Task(models.Model):
         related_name="tasks"
     )
 
+    # ✅ FIXED (optional user)
     assigned_to = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="assigned_tasks"
+    'Member',
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name="tasks"
+)
+
+    # ✅ NEW (IMPORTANT)
+    sprint = models.ForeignKey(
+        Sprint,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks"
     )
 
+    # ✅ NEW FIELDS
+    due_date = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.title
 
 
-# ===============================
-# 🔹 ACTIVITY LOG (IMPORTANT 🔥)
-# ===============================
-class ActivityLog(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    action = models.CharField(max_length=255)
-
-    task = models.ForeignKey(
-        Task,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
-
-    timestamp = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.user.username} - {self.action}"
-
-
-# ===============================
-# 🔹 NOTIFICATION (OPTIONAL 🔥)
-# ===============================
-class Notification(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    message = models.TextField()
-
-    is_read = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.message
-
-
-# ===============================
-# 🔹 SPRINT (ADVANCED - JIRA FEATURE 🔥)
-# ===============================
-class Sprint(models.Model):
-    name = models.CharField(max_length=200)
-
-    project = models.ForeignKey(
-        Project,
-        on_delete=models.CASCADE,
-        related_name="sprints"
-    )
-
-    start_date = models.DateField()
-    end_date = models.DateField()
+class Member(models.Model):
+    name = models.CharField(max_length=100)
+    role = models.CharField(max_length=100)
 
     def __str__(self):
         return self.name

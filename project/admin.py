@@ -1,6 +1,5 @@
 from django.contrib import admin
-from .models import Project, Task, Sprint, ActivityLog, Notification
-
+from .models import Project, Task, Sprint
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
@@ -16,12 +15,3 @@ class TaskAdmin(admin.ModelAdmin):
 class SprintAdmin(admin.ModelAdmin):
     list_display = ['id', 'name', 'project', 'start_date', 'end_date']
 
-
-@admin.register(ActivityLog)
-class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ['user', 'action', 'timestamp']
-
-
-@admin.register(Notification)
-class NotificationAdmin(admin.ModelAdmin):
-    list_display = ['user', 'message', 'is_read']
