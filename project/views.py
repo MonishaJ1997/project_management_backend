@@ -146,32 +146,37 @@ def tasks(request):
 # =========================================
 @api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAuthenticated])
-
 def task_detail(request, pk):
     try:
         task = Task.objects.get(id=pk)
     except Task.DoesNotExist:
         return Response({"error": "Task not found"}, status=404)
 
+    # ✅ DELETE (handle first)
+    if request.method == 'DELETE':
+        task.delete()
+        return Response({"message": "Task deleted"}, status=204)
+
+    # ✅ PATCH
     if request.method == 'PATCH':
-      data = request.data.copy()
+        data = request.data.copy()
 
-    # 🔥 force integer conversion
-    if 'assigned_to' in data and data['assigned_to'] not in [None, ""]:
-        try:
-            data['assigned_to'] = int(data['assigned_to'])
-        except:
-            data['assigned_to'] = None
+        # 🔥 force integer conversion
+        if 'assigned_to' in data and data['assigned_to'] not in [None, ""]:
+            try:
+                data['assigned_to'] = int(data['assigned_to'])
+            except:
+                data['assigned_to'] = None
 
-    serializer = TaskSerializer(task, data=data, partial=True)
+        serializer = TaskSerializer(task, data=data, partial=True)
 
-    if serializer.is_valid():
-        print("VALID:", serializer.validated_data)  # DEBUG
-        serializer.save()
-        return Response(serializer.data)
+        if serializer.is_valid():
+            print("VALID:", serializer.validated_data)
+            serializer.save()
+            return Response(serializer.data)
 
-    print("ERROR:", serializer.errors)
-    return Response(serializer.errors, status=400)
+        print("ERROR:", serializer.errors)
+        return Response(serializer.errors, status=400)
 # =========================================
 # 📅 SPRINTS
 # =========================================
